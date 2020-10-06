@@ -1,4 +1,4 @@
-from cassandra.cluster import Cluster
+# Read/write# Read/writefrom cassandra.cluster import Cluster
 import models
 import pytz
 from db._base import HouseSensorRepository, WeatherRepository, HouseModelRepository, FlexibilityModelRepository
@@ -28,7 +28,7 @@ class DBConnection:
         self.session.shutdown()
         logger.info(f"Close connection to database {self.db}")   
 
-# For reading/writing data for subcentral/building                              
+# Read/write data for subcentral/building                              
 class CassandraHouseRepository(HouseSensorRepository):
 
     _SUBCENTRAL_QUERY_TEMPLATE = '''
@@ -410,7 +410,7 @@ class CassandraHouseRepository(HouseSensorRepository):
             
         logger.info("Finished writing report")  
 
-# For reading/writing data related with weather                     
+# Read/write data related with weather                     
 class CassandraWeatherRepository(WeatherRepository):
 
     _WEATHER_QUERY_TEMPLATE = '''
@@ -540,7 +540,7 @@ class CassandraWeatherRepository(WeatherRepository):
             
         logger.info("Finished writing forecast")
 
-# For reading/writing data for subcentral/building and weather
+# Read/write data for subcentral/building and weather
 class CassandraRepository(CassandraHouseRepository, CassandraWeatherRepository):
     
     def get_all_by_house(self, house, time_range, now):
@@ -571,7 +571,8 @@ class CassandraRepository(CassandraHouseRepository, CassandraWeatherRepository):
 
         return data
 
-# For reading/writing data on aggregation level
+# Add for flexibility service
+# Read/write data on aggregation level
 class CassandraAggregateRepository():
     
     _GRID_PEAK_QUERY_TEMPLATE = '''
