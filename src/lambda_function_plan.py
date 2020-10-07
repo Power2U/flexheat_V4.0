@@ -169,11 +169,11 @@ def lambda_handler():
     aggregate_repo = FlexibilityModelRepository(session)
     flexibility_repo = CassandraAggregateRepository(session)
 
-#     planning_start = "2020-10-01 00:00:00.000Z"
-#     planning_start = datetime.strptime(planning_start, "%Y-%m-%d %H:%M:%S.%f%z")    
-    start = datetime.utcnow() + timedelta(hours=1)
-    start = start.strftime("%Y-%m-%d %H:00:00.000Z")
-    planning_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
+    planning_start = "2020-10-01 00:00:00.000Z"
+    planning_start = datetime.strptime(planning_start, "%Y-%m-%d %H:%M:%S.%f%z")    
+#     start = datetime.utcnow() + timedelta(hours=1)
+#     start = start.strftime("%Y-%m-%d %H:00:00.000Z")
+#    planning_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
     logger.info(f"Planning to start: {planning_start}")
       
     ES_URL = 'http://13.48.110.27:9200/'    
@@ -189,7 +189,7 @@ def lambda_handler():
         
         logger.info(f"Plan for energy company customer_id = {utility}")
        
-        grids = getActiveGrid(es, utility, planning_start) # return peak hours sorting by grid zone
+        grids = getActiveGrid(es, utility, planning_start)
         
         if bool(grids) is False:
             logger.info("No peak hours are specified")
@@ -205,7 +205,7 @@ def lambda_handler():
             
             grid_peak = runGridPeak(utility, grid, aggregate_repo, flexibility_repo, planning_start)
             
-            subcentrals = getActiveSubcentrals(es, utility, grid)# return subcentrals in a grid zone
+            subcentrals = getActiveSubcentrals(es, utility, grid)
             
             if len(subcentrals) == 0:
                 logger.info("No active subcentral is found")

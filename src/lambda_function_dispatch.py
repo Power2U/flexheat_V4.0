@@ -27,45 +27,60 @@ def connectES(ES_URL):
     
     return es  
 
+# Fetch all energy companies that enable the flexibility service
 def getActiveUtility(es):
 
-    res = es.search(index="flexheat_customers", body={"query": {"bool": {"must": [{"term": {
-                    "enable_flexibility": "true"}}], "must_not": [], "should": []}}, "from": 0, "size": 10, "sort": [], "aggs": {}})
+    res = es.search(index="flexheat_customers", body={"query":{"bool":{"must":[{"term":{"enable_flex":"true"}},{"term":{"customer_parent":"0"}}],
+        "must_not":[],"should":[]}},"from":0,"size":50,"sort":[],"aggs":{}})
 
     result = []
 
     for item in res['hits']['hits']:
-        result.append(item["_source"])
+        result.append(item["_source"]["customer_id"])
 
     return result
 
+# Fetch all grid zones where peak hours are specified. 
+# Such grid zones need flexibility.
 def getActiveGrid(es, utility, planning_start):
 
-    # TODO: fetch peak hours: ts_start>= planning_start and customer_id = utility
-    res = es.search(index="aggregate_flexibility_dispatch", body={"query": {"bool": {"must": [{"term": {
-                    "customer_id": "utility"}}], "must_not": [], "should": []}}, "from": 0, "size": 10, "sort": [], "aggs": {}})
+    start = planning_start.strftime('%Y-%m-%dT%H:%M:%SZ')
+    res = es.search(index="flexheat_peak_hours", body={"query":{"bool":{"must":[{"term":{"customer_id":f"{utility}"}},
+        {"range":{"ts_start":{"gt":start}}}],"must_not":[],"should":[]}},"from":0,"size":10,"sort":[],"aggs":{}})
 
-    result = {} # set, without duplicate values
+    result = set() # set, without duplicate values
 
     for item in res['hits']['hits']:
         result.add(item["_source"]["grid_zone"]) # return grid_zone 
 
     return result
 
+# Fetch all subcentrals that enable the flexibility service and optimization.
 def getActiveSubcentrals(es, utility, grid): 
+    
+    # Fetch all customers supplied by the energy company
+    res = es.search(index="flexheat_customers", body={"query":{"bool":{"must":[{"term":{"customer_parent":f"{utility}"}}],
+        "must_not":[],"should":[]}},"from":0,"size":10,"sort":[],"aggs":{}})
 
-    # TODO: fetch subcentrals: customer_id = utility, grid_zone = grid, enable_fcc = true, enable_flexibility = true
-    res = es.search(index="flexheat_peak_hours", body={"query": {"bool": {"must": [{"term": {
-                    "enable_flexibility": "true"}}], "must_not": [], "should": []}}, "from": 0, "size": 10, "sort": [], "aggs": {}})
-
-    result = []
+    customers = []
 
     for item in res['hits']['hits']:
-        result.append(item["_source"]) # return subcentral record
+        customers.append(item["_source"]["customer_id"])
+    
+    # Fetch all subcentrals belonging to the customer and locate in the grid zone
+    subcentrals = []
 
-    return result
+    for customer in customers:
+        res = es.search(index="flexheat_subcentral", body={"query":{"bool":{"must":[{"term":{"customer_id":f"{customer}"}},
+            {"term":{"grid_zone":f"{grid}"}},{"term":{"enable_fcc":"true"}},{"term":{"enable_flex":"true"}}],"must_not":[],"should":[]}},
+            "from":0,"size":10,"sort":[],"aggs":{}})        
 
-def runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, start, subcentrals, cassandra_house_repo):
+        for item in res['hits']['hits']:
+            subcentrals.append(item["_source"])
+        
+    return subcentrals
+
+def runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, planning_start, subcentrals, cassandra_house_repo, house_repo):
     logger.info(f"Dispatch flexibility for customer_id = {utility}, grid_zone = {grid}")
 
     try:
@@ -74,7 +89,7 @@ def runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, start, subc
             grid = grid,
             aggregate_repo = aggregate_repo,
             flexibility_repo = flexibility_repo,
-            planning_start = start
+            planning_start = planning_start
         )
         
         subcentral_dispatches = forecaster.distribute_dispatch(subcentrals = subcentrals, 
@@ -100,42 +115,45 @@ def lambda_handler():
     cassandra_house_repo = CassandraHouseRepository(session)
     house_repo = RESTHouseModelRepository(session)
     aggregate_repo = FlexibilityModelRepository(session)
-    flexibility_repo = CassandraFlexibilityRepository(session)
+    flexibility_repo = CassandraAggregateRepository(session)
 
-    planning_start = datetime.utcnow() + timedelta(hours=1)
-
-    planning_start = planning_start.strftime("%Y-%m-%d %H:00:00.000Z")
-
-    logger.info(f"Dispatch to start: {planning_start}")
+    planning_start = "2020-10-01 00:00:00.000Z"
+    planning_start = datetime.strptime(planning_start, "%Y-%m-%d %H:%M:%S.%f%z")    
+#     start = datetime.utcnow() + timedelta(hours=1)
+#     start = start.strftime("%Y-%m-%d %H:00:00.000Z")
+#    planning_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
+    logger.info(f"Planning to start: {planning_start}")
+      
+    ES_URL = 'http://13.48.110.27:9200/'    
+    es = connectES(ES_URL)    
     
-    start = datetime.strptime(planning_start, "%Y-%m-%d %H:%M:%S.%f%z")
-  
-    ES_URL = 'http://13.48.110.27:9200/'
-    
-    es = connectES(ES_URL)
-    
-    utilities = getActiveUtility(es) 
-    
+    utilities = getActiveUtility(es)  
+       
     logger.info("Active energy companies:")
-    logger.info(f"customer_id = {utilities}")
+    
+    logger.info(f"customer_id: {utilities}")
         
     for utility in utilities:
         
         logger.info(f"Dispatch for energy company customer_id = {utility}")
        
-        grids = getActiveGrid(es, utility, planning_start) # return peak hours sorting by grid zone
+        grids = getActiveGrid(es, utility, planning_start)
         
-        logger.info(f"Flexibility is needed for grid_zone = {grids}")
+        if bool(grids) is False:
+            logger.info("No peak hours have been specified")
+            continue 
+                       
+        logger.info(f"Flexibility is needed for grid_zone: {grids}")
        
         for grid in grids:
             
             logger.info(f"Dispatch for grid_zone = {grid}")
             
-            subcentrals = getActiveSubcentrals(es, utility, grid)# return subcentrals in a grid zone
+            subcentrals = getActiveSubcentrals(es, utility, grid)
             
             logger.info(f"Active subcentrals are: {subcentrals}")
   
-            runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, start, subcentrals, cassandra_house_repo, house_repo)
+            runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, planning_start, subcentrals, cassandra_house_repo, house_repo)
             
     dbConnection.db_shutdown()
     

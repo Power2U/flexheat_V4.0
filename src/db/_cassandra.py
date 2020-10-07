@@ -1,4 +1,4 @@
-# Read/write# Read/writefrom cassandra.cluster import Cluster
+from cassandra.cluster import Cluster
 import models
 import pytz
 from db._base import HouseSensorRepository, WeatherRepository, HouseModelRepository, FlexibilityModelRepository
@@ -228,14 +228,13 @@ class CassandraHouseRepository(HouseSensorRepository):
                       
                 schedules = json.loads(row.json)                
                 dictionary["ts_start"].append(schedules["ts_start"])
-                dictionary["subcentral_plan"].append(schedules["powe_offset"]) 
+                dictionary["subcentral_plan"].append(schedules["power_offset"]) 
                             
             data = pd.DataFrame(dictionary)
             data.set_index("ts_start", inplace = True) 
             data.index = pd.to_datetime(data.index)
             data.sort_index(ascending = True, inplace = True)
-            data = data[data.index <= now]
-            logger.warning(f"{data.powe_offset.isnull().sum()} null powe_offset out of {len(data)}")    
+            logger.warning(f"{data.subcentral_plan.isnull().sum()} null subcentral_plan out of {len(data)}")    
       
         return data
 
@@ -267,14 +266,13 @@ class CassandraHouseRepository(HouseSensorRepository):
                       
                 schedules = json.loads(row.json)                
                 dictionary["ts_start"].append(schedules["ts_start"])
-                dictionary["subcentral_dispatch"].append(schedules["powe_offset"]) 
+                dictionary["subcentral_dispatch"].append(schedules["power_offset"]) 
                             
             data = pd.DataFrame(dictionary)
             data.set_index("ts_start", inplace = True) 
             data.index = pd.to_datetime(data.index)
             data.sort_index(ascending = True, inplace = True)
-            data = data[data.index <= now]
-            logger.warning(f"{data.powe_offset.isnull().sum()} null powe_offset out of {len(data)}")    
+            logger.warning(f"{data.subcentral_dispatch.isnull().sum()} null powe_offset out of {len(data)}")    
       
         return data
     
@@ -373,7 +371,7 @@ class CassandraHouseRepository(HouseSensorRepository):
             tstamp_record = datetime.now(pytz.timezone('UTC')).strftime(self.__DATETIME_FORMAT),
             ts_start = index.strftime(self.__DATETIME_FORMAT),
             ts_end = (index + timedelta(seconds = timestep)).strftime(self.__DATETIME_FORMAT),
-            power_offset = row['power_offset']
+            power_offset = row['subcentral_dispatch']
             )
                                    
             query = self._WRITE_DISPATCH_QUERY_TEMPLATE.format(dispatch_json = dispatch.to_json())
@@ -637,7 +635,7 @@ class CassandraAggregateRepository():
         
         if len(rows._current_rows) == 0:
                     
-            logger.debug(f"No peak hour is found for cid = {customer_id}, grid_zone = {grid}")
+            logger.debug(f"No peak hour is found for cid = {customer}, grid_zone = {grid}")
             data = pd.DataFrame(dictionary)
        
         else:
@@ -664,7 +662,8 @@ class CassandraAggregateRepository():
         maxtime = now + time_range[1]
         logger.debug(f"Fetching flexibility plan for customer_id = {customer}, grid_zone = {grid}")
 
-        query = self._GRID_PLAN_QUERY_TEMPLATE.format(customer_id = house.customer_id, subcentral_id = house.subcentral_id, \
+        query = self._GRID_PLAN_QUERY_TEMPLATE.format(customer_id = customer, \
+                                                      grid_zone = grid, \
                                                       mintime=mintime.strftime(self.__DATETIME_FORMAT), \
                                                       maxtime=maxtime.strftime(self.__DATETIME_FORMAT))
 
@@ -676,7 +675,7 @@ class CassandraAggregateRepository():
         
         if len(rows._current_rows) == 0:
                     
-            logger.debug(f"No flexibility plan is found for cid = {customer_id}, grid_zone = {grid}")
+            logger.debug(f"No flexibility plan is found for cid = {customer}, grid_zone = {grid}")
             data = pd.DataFrame(dictionary)
        
         else:
@@ -684,14 +683,13 @@ class CassandraAggregateRepository():
                       
                 schedules = json.loads(row.json)                
                 dictionary["ts_start"].append(schedules["ts_start"])
-                dictionary["aggregate_plan"].append(schedules["powe_offset"]) 
+                dictionary["aggregate_plan"].append(schedules["power_offset"]) 
                             
             data = pd.DataFrame(dictionary)
             data.set_index("ts_start", inplace = True) 
             data.index = pd.to_datetime(data.index)
             data.sort_index(ascending = True, inplace = True)
-            data = data[data.index <= now]
-            logger.warning(f"{data.powe_offset.isnull().sum()} null powe_offset out of {len(data)}")    
+            logger.warning(f"{data.aggregate_plan.isnull().sum()} null aggregate_plan out of {len(data)}")    
       
         return data           
     
@@ -703,9 +701,10 @@ class CassandraAggregateRepository():
         maxtime = now + time_range[1]
         logger.debug(f"Fetching dispatch plan for customer_id = {customer}, grid_zone = {grid}")
 
-        query = self._GRID_DISPATCH_QUERY_TEMPLATE.format(customer_id = house.customer_id, subcentral_id = house.subcentral_id, \
-                                                      mintime=mintime.strftime(self.__DATETIME_FORMAT), \
-                                                      maxtime=maxtime.strftime(self.__DATETIME_FORMAT))
+        query = self._GRID_DISPATCH_QUERY_TEMPLATE.format(customer_id = customer, \
+                                                          grid_zone = grid, \
+                                                          mintime=mintime.strftime(self.__DATETIME_FORMAT), \
+                                                          maxtime=maxtime.strftime(self.__DATETIME_FORMAT))
 
         print(query)
 
@@ -715,7 +714,7 @@ class CassandraAggregateRepository():
         
         if len(rows._current_rows) == 0:
                     
-            logger.debug(f"No dispatch is found for cid = {customer_id}, grid_zone = {grid}")
+            logger.debug(f"No dispatch is found for cid = {customer}, grid_zone = {grid}")
             data = pd.DataFrame(dictionary)
        
         else:
@@ -723,14 +722,13 @@ class CassandraAggregateRepository():
                       
                 schedules = json.loads(row.json)                
                 dictionary["ts_start"].append(schedules["ts_start"])
-                dictionary["aggregate_dispatch"].append(schedules["powe_offset"]) 
+                dictionary["aggregate_dispatch"].append(schedules["power_offset"]) 
                             
             data = pd.DataFrame(dictionary)
             data.set_index("ts_start", inplace = True) 
             data.index = pd.to_datetime(data.index)
             data.sort_index(ascending = True, inplace = True)
-            data = data[data.index <= now]
-            logger.warning(f"{data.powe_offset.isnull().sum()} null powe_offset out of {len(data)}")    
+            logger.warning(f"{data.aggregate_dispatch.isnull().sum()} null powe_offset out of {len(data)}")    
       
         return data           
         

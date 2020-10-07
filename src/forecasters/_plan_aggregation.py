@@ -2,7 +2,7 @@ from db._cassandra import CassandraAggregateRepository
 from db._models import HouseModelRepository, FlexibilityModelRepository
 import pytz
 from sklearn.linear_model import LinearRegression
-import models
+from models import *
 import math
 import numpy as np
 import pandas as pd
@@ -95,7 +95,9 @@ class AggregationPlan():
             time_range = self._time_range,
             now = self._planning_start
         ).join(data_planning, how = 'outer')  
-
+        
+        aggregate_dispatch.fillna(0, inplace=True)
+                
         aggregate_plan = self._flexibility_repo.get_plan_by_customer(
             customer = self._customer,
             grid = self._grid,
@@ -125,18 +127,20 @@ class AggregationPlan():
                 now = self._planning_start
                 )
         
-            if not subcentral_plan.empty:
+            if subcentral_plan.empty:
+                continue
+            else:
                 subcentral_plan.fillna(0, inplace=True)
                 index = pd.date_range(self._planning_start - self._time_range[0], self._planning_start + self._time_range[1], freq = f"{self._timestep}S")
                 subcentral_dispatch = pd.DataFrame(index = index)
                 subcentral_dispatch = subcentral_dispatch.join(subcentral_plan, how = 'outer')         
-                subcentral_dispatch = subcentral_dispatch.resample(timedelta(seconds = self._timestep)).mean()         
-                
-                subcentral_dispatch['subcentral_dispatch'] = np.nan                    
+                subcentral_dispatch = subcentral_dispatch.resample(timedelta(seconds = self._timestep)).mean()                         
+                subcentral_dispatch['subcentral_dispatch'] = 0  
+                                  
                 for index, row in aggregate_plan.iterrows():
-                    if row['power_offset'] != 0:
-                        prop = subcentral_dispatch[index, 'subcentral_plan'] / row['aggregate_plan'] 
-                        subcentral_dispatch['subcentral_dispatch'] = prop * aggregate_dispatch[index,'aggregate_dispatch']
+                    if row['aggregate_plan'] != 0:
+                        prop = subcentral_dispatch.loc[index, 'subcentral_plan'] / row['aggregate_plan'] 
+                        subcentral_dispatch.loc[index, 'subcentral_dispatch'] = prop * aggregate_dispatch.loc[index,'aggregate_dispatch']
                     else:
                         subcentral_dispatch['subcentral_dispatch'] = 0
         
@@ -149,9 +153,7 @@ class AggregationPlan():
                 cassandra_house_repo.write_dispatch_for_house(house = house,
                                                               output = subcentral_dispatch,
                                                               house_repo = house_repo)
-                
-                logger.info(f"Finished writing dispatch")            
-            
+                            
             
                     
                 
