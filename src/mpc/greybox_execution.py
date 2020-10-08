@@ -54,10 +54,10 @@ class PnPkModel_Execution(object):
         
         # Add for auto dynamic model
         self._variables.in_temp_diff = cp.Variable(shape = self._max_lag + self._horizon, name = '1st order differencing of indoor temperature')
-    
-        # Add for flexibility service
-        self._variable.above_error = cp.Variable(shape = self._horzion + 1, name = 'Temp above error', nonneg=True)
         
+        # Add for flexibility service
+        self._variables.above_error = cp.Variable(shape = self._horizon + 1, name = 'Temp above error', nonneg=True)
+    
     def _init_parameters(self):
         
         logger.info("Initializing optimization parameters")
@@ -71,7 +71,7 @@ class PnPkModel_Execution(object):
         self._parameters.max_power_offset = cp.Parameter(name='Max power offset')          
         self._parameters.max_ramp = cp.Parameter(name='Max power ramping')
         self._parameters.setpoint = cp.Parameter(name='Temperature target')
-        self._parameters.below_error_priority = cp.Parameter(name='Cost amplification of below error')
+        self._parameters.below_error_priority = cp.Parameter(name='Cost amplification below error')
         self._parameters.energy_price_priority = cp.Parameter(name='Cost amplification of energy price')
         self._parameters.rate_limit_upper = cp.Parameter(name='Upper rate limit')
         self._parameters.rate_limit_lower = cp.Parameter(name='Lower rate limit')
@@ -82,14 +82,14 @@ class PnPkModel_Execution(object):
         self._parameters.in_temp_diff_known = cp.Parameter(shape = self._max_lag + self._horizon, name = '1st order differencing of indoor temperature')
 
         # Add for flexibility service
-        self._parameters._hysteresis_above = cp.Parameter(name = 'Hysteresis for indoor temperature above the set point')
-        self._parameters._hysteresis_below = cp.Parameter(name = 'Hysteresis for indoor temperature below the set point')
+        self._parameters.hysteresis_above = cp.Parameter(name = 'Hysteresis for indoor temperature above the set point')
+        self._parameters.hysteresis_below = cp.Parameter(name = 'Hysteresis for indoor temperature below the set point')
         self._parameters.peak_hour = cp.Parameter(shape = self._horizon, name = 'Peak hour') # 1: peak hour, 0: off-peak hour
         self._parameters.flexibility_price_priority = cp.Parameter(name = 'Cost amplification of flexibility price')
         self._parameters.flexibility_price = cp.Parameter(name = 'Flexibility price')
         self._parameters.above_error_priority = cp.Parameter(name = 'Cost amplification of above error')
-        self._parameters.dispatch = cp.Parameter(shape = self._horizon, name = 'Dispatched reduction')
         self._parameters.rebound_limit = cp.Parameter(shape = self._horizon, name = 'Rebound limit')
+        self._parameters.dispatch = cp.Parameter(shape = self._horizon, name = 'Dispatched reduction')
         
     @property
     def parameters(self):
@@ -111,6 +111,10 @@ class PnPkModel_Execution(object):
         dynamic = self._dynamic
         model = self._model
         house = self._physical
+        
+        # Test with fixed model parameters
+        model.variable_coef = [ 0.0, 0.9452124, 0.33690313, 5.348071E-4, -0.024608968, -0.16360809, 0.043476336, 0.017029949, -0.008980742, 0.1853629, -0.6580194]
+        model.intercept = 1.048 
 
         # Define dynamic model
         dynamic_model = []
@@ -142,6 +146,9 @@ class PnPkModel_Execution(object):
                 model_variables.append(p.solar_diff[self._max_lag + t - 1 - i])
             
             # Define dynamic model equation              
+            if len(model.variable_coef) != len(model_variables) + 1:
+                logger.error('Length of dynamic model variable_coef <> length of model variables.')
+                
             eq = 1 * model.variable_coef[0]
             
             for i in range(len(model_variables)):
@@ -188,32 +195,35 @@ class PnPkModel_Execution(object):
             v.power[t] >= p.rate_limit_lower for t in range(self._horizon)
         ]
         
+#         errors = [
+#             v.below_error[t] >= p.setpoint - p.hysteresis_below - v.temperature[t] for t in range(self._horizon + 1)
+#         ]
         errors = [
             v.below_error[t] >= p.setpoint - p.hysteresis_below - v.temperature[t] for t in range(self._horizon + 1)
         ] + [
             v.above_error[t] >= v.temperature[t] - p.setpoint - p.hysteresis_above for t in range(self._horizon + 1)
         ]
-        
+                
         reference = [
-            v.power[t] <= p.baseline_power[t] + p.max_power_offset for t in range(self._horizon)
+            v.power[t] <= p.baseline_power[t] + self.parameters.max_power_offset for t in range(self._horizon)
         ] + [
-            v.power[t] >= p.baseline_power[t] - p.max_power_offset for t in range(self._horizon)
+            v.power[t] >= p.baseline_power[t] - self.parameters.max_power_offset for t in range(self._horizon)
         ]
 
         smoothness = [
-            v.power[t] - v.power[t-1] <= p.max_ramp for t in range(1, self._horizon)
+            v.power[t] - v.power[t-1] <= self.parameters.max_ramp for t in range(1, self._horizon)
         ] + [
-            v.power[t-1] - v.power[t] <= p.max_ramp for t in range(1, self._horizon)
+            v.power[t-1] - v.power[t] <= self.parameters.max_ramp for t in range(1, self._horizon)
         ] + [
-            v.power[0] - p.initial_power <= p.max_ramp 
+            v.power[0] - p.initial_power <= self.parameters.max_ramp 
         ] + [
-            p.initial_power - v.power[0] <= p.max_ramp 
+            p.initial_power - v.power[0] <= self.parameters.max_ramp 
         ]
-        
+
         # Add for flexibility service
         rebound = [
             v.power[t] <= p.baseline_power[t] * (1 + p.rebound_limit) for t in range(1, self._horizon)
-            ]
+            ]        
         
         constraints = self.dynamics + initial + temperature_diff + rate_limit + errors + reference + smoothness + rebound
         
@@ -227,16 +237,35 @@ class PnPkModel_Execution(object):
     def objective(self):
 
         logger.info('Constructing objective function')
+
+        '''
+        Cost function:
         
+        Imaginary penalty for temperature deviation when below the lowest requirement
+        + Imaginary penalty for temperature deviation when above the highest requirement
+        + Energy cost
+        + Income/penalty from delivered flexibility service: 
+            Assuming the income is obtained if more power reduction is provided than dispatch,
+            whereas an extra cost would happen if the delivered reduction is less than dispatch.
+            Revision would be needed if other business models are adopted.
+        
+        The priorities are used to adjust the significance of each component
+                
+        '''        
+
+        v = self._variables
+        p = self._parameters
+                
         return cp.Minimize(
-                self._parameters.below_error_priority * sum(self._variables.below_error)
-                + self._parameters.above_error_priority * sum(self._variables.above_error)
-                + self._parameters.energy_price_priority * sum(self._parameters.energy_price * self._variables.power * self._timestep / 3600)
-                - self._parameters.flexibility_price_priority * sum(self._parameters.flexibility_price 
-                                                                    * (self._parameters.dispatch[t] - self._variables.power[t] - self._parameters.baseline_power[t]) 
-                                                                    * self._parameters.peak_hour * self._timestep / 3600)        
-                )
-            
+                p.below_error_priority * sum(v.below_error)
+                + p.above_error_priority * sum(v.above_error)
+                + p.energy_price_priority * p.energy_price * sum(v.power) * self._timestep / 3600
+                - p.flexibility_price_priority * p.flexibility_price * sum((baseline - power + dispatch) * peak \
+                   for baseline, power, peak, dispatch in zip(p.baseline_power, v.power, p.peak_hour, p.dispatch)) \
+                   * self._timestep / 3600
+        )        
+        
+        
     def solve(self, forecast_data, initial_data, diff_data, heatcurve):
 
         logger.info("Setting values for optimization parameters")
@@ -248,7 +277,7 @@ class PnPkModel_Execution(object):
         self._parameters.baseline_power.value = forecast_data.baseline_power.values
         self._parameters.max_power_offset.value = self._config.max_power_offset  
         self._parameters.max_ramp.value = self._config.max_ramp
-        self._parameters.setpoint.value = self._config.setpoint
+        self._parameters.setpoint.value = 21#self._config.setpoint
         self._parameters.below_error_priority.value = self._config.below_error_priority
         self._parameters.energy_price_priority.value = self._config.energy_price_priority
         self._parameters.rate_limit_lower = self._config.rate_limit_lower
@@ -258,17 +287,17 @@ class PnPkModel_Execution(object):
         self._parameters.out_temp_diff = diff_data.out_temp_diff.values
         self._parameters.solar_diff = diff_data.solar_diff.values
         self._parameters.in_temp_diff_known = diff_data.in_temp_diff.values
-                
+
         # Add for flexibility service
-        self._parameters._hysteresis_above = self._config.hysteresis_above
-        self._parameters._hysteresis_below = self._config.hysteresis_below
+        self._parameters.hysteresis_above = self._config.hysteresis_above
+        self._parameters.hysteresis_below = self._config.hysteresis_below
         self._parameters.peak_hour = forecast_data.peak_hour.values
         self._parameters.flexibility_price_priority = self._config.flexibility_price_priority
-        self._parameters.flexibility_price = self._config.flexibility_price
+        self._parameters.flexibility_price = self._config.flexibility_price_priority
         self._parameters.above_error_priority = self._config.above_error_priority
         self._parameters.rebound_limit = self._config.rebound_limit
         self._parameters.dispatch = forecast_data.subcentral_dispatch
-                
+                        
         problem = self.to_problem()
 
         logger.info('Call CVXOPT for solution...')

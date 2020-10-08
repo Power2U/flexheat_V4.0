@@ -235,12 +235,30 @@ class PnPkModel_Plan(object):
 
         logger.info('Constructing objective function')
         
+        '''
+        Cost function:
+        
+        Imaginary penalty for temperature deviation when below the lowest requirement
+        + Imaginary penalty for temperature deviation when above the highest requirement
+        + Energy cost
+        + Income from flexibility service: 
+            Assuming the income is only obtained when providing power reduction in peak hours, 
+            whereas a power increase in peak hours may lead to an extra cost.                    
+            Revision would be needed if other business models are adopted.
+
+        The priorities are used to adjust the significance of each component
+        
+        '''
+
+        v = self._variables
+        p = self._parameters
+        
         return cp.Minimize(
-                self._parameters.below_error_priority * sum(self._variables.below_error)
-                + self._parameters.energy_price_priority * self._parameters.energy_price * sum(self._variables.power) * self._timestep / 3600
-                + self._parameters.above_error_priority * sum(self._variables.above_error)
-                - self._parameters.flexibility_price_priority * self._parameters.flexibility_price * sum((baseline - power) * peak \
-                   for baseline, power, peak in zip(self._parameters.baseline_power, self._variables.power, self._parameters.peak_hour)) \
+                p.below_error_priority * sum(v.below_error)
+                + p.above_error_priority * sum(v.above_error)
+                + p.energy_price_priority * p.energy_price * sum(v.power) * self._timestep / 3600
+                - p.flexibility_price_priority * p.flexibility_price * sum((baseline - power) * peak \
+                   for baseline, power, peak in zip(p.baseline_power, v.power, p.peak_hour)) \
                    * self._timestep / 3600
         )
         

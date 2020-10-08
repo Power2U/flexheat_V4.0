@@ -17,25 +17,24 @@ class SubcentralReport():
     def __init__(self, house: models.House, 
                  cassandra_repo: CassandraRepository, 
                  house_repo: HouseModelRepository, 
-                 report_end: pytz.datetime.datetime,
+                 report_start: pytz.datetime.datetime,
                  utility_config: FlexibilityConfiguration):
         
         self._house = house
         self._cassandra_repo = cassandra_repo
         phys, _, config, _, dynamic = house_repo.get_parameters_by_house(self._house)
-        self._heatcurve = house_repo.get_heatcurve_by_house(self._house, self._his_end)
         self._report_horizon = utility_config.planning_horizon
         self._report_timestep = utility_config.timestep
-        self._report_end = report_end
+        self._report_start = report_start
+        self.heatcurve = house_repo.get_heatcurve_by_house(self._house, self._report_start)
         self._time_range = self.get_time_range()                       
-        self.report = self.source_data()
-        
+        self.report = self.source_data()        
         
     def get_time_range(self):
         
         logger.info("Getting time range for report data:")        
-        report_past = (self._report_horizon) * self._report_timestep # Generate index for the start of each time step e.g. 0-47        
-        time_range = [timedelta(seconds = report_past), timedelta(seconds = 0)]                
+        report_len = (self._report_horizon - 1) * self._report_timestep      
+        time_range = [timedelta(seconds = 0), timedelta(seconds = report_len)]                
 
         logger.info(f"{time_range}")        
         return time_range
@@ -43,13 +42,13 @@ class SubcentralReport():
     def source_data(self):
         
         logger.info("Preparing for source data")
-        index = pd.date_range(self._report_end - self._time_range[0], self._his_end + self._time_range[1], freq = f"{self._report_timestep}S")
+        index = pd.date_range(self._report_start - self._time_range[0], self._report_start + self._time_range[1], freq = f"{self._report_timestep}S")
         his = pd.DataFrame(index = index)
         
         self._all_data = self._cassandra_repo.get_all_by_house_resample(
             house = self._house,
             time_range=self._time_range,
-            now=self._report_past,
+            now=self._report_start,
             timestep = self._report_timestep
         ).join(his, how = 'outer')                
         
@@ -73,7 +72,7 @@ class SubcentralReport():
         self._all_data.interpolate(method='linear', limit_direction='backward', inplace = True) 
                                                          
         self.heat_power()
-        self.baselin_power()
+        self.baseline_power()
         self._all_data['power_offset'] = self._all_data['heat_power'] - self._all_data['baseline_power']
         
         return self._all_data

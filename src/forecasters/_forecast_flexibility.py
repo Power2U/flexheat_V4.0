@@ -221,7 +221,7 @@ class HouseDataForecaster(HouseForecaster):
         
         if not dispatch.empty:
             dispatch.fillna(0)
-            self.forecast_data = self.forecast_data.join(self.dispatch, how = 'outer')
+            self.forecast_data = self.forecast_data.join(dispatch, how = 'outer')
                  
             for index, row in self.forecast_data.iterrows():
                 if row['peak_hour'] == 1:

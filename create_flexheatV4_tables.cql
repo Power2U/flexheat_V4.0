@@ -59,8 +59,8 @@ CREATE TABLE flexheat.subcentral_flexibility_dispatch (
     ts_end timestamp,   
     power_offset float, 
     tstamp_record timestamp,
-    PRIMARY KEY (customer_id, subcentral_id, grid_zone, tstamp_record, ts_start)
-) WITH CLUSTERING ORDER BY (subcentral_id ASC, grid_zone ASC, tstamp_record DESC, ts_start ASC);
+    PRIMARY KEY (customer_id, subcentral_id, grid_zone, ts_start)
+) WITH CLUSTERING ORDER BY (subcentral_id ASC, grid_zone ASC, ts_start ASC);
 
 CREATE TABLE flexheat.aggregate_flexibility_report (
     customer_id int,

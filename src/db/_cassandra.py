@@ -137,7 +137,7 @@ class CassandraHouseRepository(HouseSensorRepository):
         data.index = pd.to_datetime(data.index)
         data.sort_index(ascending = True, inplace = True)
         
-        data = data[data.index <= now]
+#        data = data[data.index <= now]
         
         logger.warning(f"{data.inflow_temp.isnull().sum()} null inflow_temp out of {len(data)}")
         logger.warning(f"{data.measured_outside_temp.isnull().sum()} null measured_outside_temp out of {len(data)}")
@@ -187,7 +187,7 @@ class CassandraHouseRepository(HouseSensorRepository):
         data.index = pd.to_datetime(data.index)
         data.sort_index(ascending = True, inplace = True)
 
-        data = data[data.index <= now]
+#        data = data[data.index <= now]
         
         logger.warning(f"{data.average_indoor_temperature.isnull().sum()} null average_indoor_temperature out of {len(data)}")    
             
@@ -272,7 +272,7 @@ class CassandraHouseRepository(HouseSensorRepository):
             data.set_index("ts_start", inplace = True) 
             data.index = pd.to_datetime(data.index)
             data.sort_index(ascending = True, inplace = True)
-            logger.warning(f"{data.subcentral_dispatch.isnull().sum()} null powe_offset out of {len(data)}")    
+            logger.warning(f"{data.subcentral_dispatch.isnull().sum()} null subcentral_dispatch out of {len(data)}")    
       
         return data
     
@@ -389,7 +389,7 @@ class CassandraHouseRepository(HouseSensorRepository):
 
         for index, row in output.iterrows():
             
-            dispatch = models.Report(                
+            report = models.Report(                
             customer_id = house.customer_id,
             subcentral_id = house.subcentral_id,
             grid_zone = house.grid_zone,
@@ -397,12 +397,12 @@ class CassandraHouseRepository(HouseSensorRepository):
             ts_start = index.strftime(self.__DATETIME_FORMAT),
             ts_end = (index + timedelta(seconds = timestep)).strftime(self.__DATETIME_FORMAT),
             power_offset = row['power_offset'],
-            baseline_power = row['baseline_power'],
-            heat_power = row['heat_power'],
-            indoor_temp = row['average_indoor_temperature']
+            heating_baseline = row['baseline_power'],
+            heating_power = row['heat_power'],
+            average_indoor_temperature = row['average_indoor_temperature']
             )
                              
-            query = self._WRITE_REPORT_QUERY_TEMPLATE.format(dispatch_json = dispatch.to_json())
+            query = self._WRITE_REPORT_QUERY_TEMPLATE.format(report_json = report.to_json())
                
             self.session.execute(query)
             

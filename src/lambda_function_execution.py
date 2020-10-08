@@ -5,8 +5,9 @@ from elasticsearch import Elasticsearch
 from datetime import *
 from db import *
 from forecasters._forecast_flexibility import HouseDataForecaster
+from forecasters._plan_aggregation import AggregationPlan
 from models import *
-from regulators._mpc_flexibility import MPCController
+from regulators._mpc_flexibility_execution import MPCController_Execution
 
 logger = logging.getLogger(__name__)
 logger.setLevel('DEBUG')
@@ -27,44 +28,60 @@ def connectES(ES_URL):
     
     return es  
 
+# Fetch all energy companies that enable the flexibility service
 def getActiveUtility(es):
 
-    res = es.search(index="flexheat_customers", body={"query": {"bool": {"must": [{"term": {
-                    "enable_flexibility": "true"}}], "must_not": [], "should": []}}, "from": 0, "size": 10, "sort": [], "aggs": {}})
+    res = es.search(index="flexheat_customers", body={"query":{"bool":{"must":[{"term":{"enable_flex":"true"}},{"term":{"customer_parent":"0"}}],
+        "must_not":[],"should":[]}},"from":0,"size":50,"sort":[],"aggs":{}})
 
     result = []
 
     for item in res['hits']['hits']:
-        result.append(item["_source"])
+        result.append(item["_source"]["customer_id"])
 
     return result
 
+# Fetch all grid zones where peak hours are specified. 
+# Such grid zones need flexibility.
 def getActiveGrid(es, utility, planning_start):
 
-    # TODO: fetch peak hours: ts_start>= planning_start and customer_id = utility
-    res = es.search(index="flexheat_peak_hours", body={"query": {"bool": {"must": [{"term": {
-                    "customer_id": "utility"}}], "must_not": [], "should": []}}, "from": 0, "size": 10, "sort": [], "aggs": {}})
+    start = planning_start.strftime('%Y-%m-%dT%H:%M:%SZ')
+    res = es.search(index="flexheat_peak_hours", body={"query":{"bool":{"must":[{"term":{"customer_id":f"{utility}"}},
+        {"range":{"ts_start":{"gt":start}}}],"must_not":[],"should":[]}},"from":0,"size":10,"sort":[],"aggs":{}})
 
-    result = {} # set, without duplicate values
+    result = set() # set, without duplicate values
 
     for item in res['hits']['hits']:
         result.add(item["_source"]["grid_zone"]) # return grid_zone 
 
     return result
 
+# Fetch all subcentrals that enable the flexibility service and optimization.
 def getActiveSubcentrals(es, utility, grid): 
+    
+    # Fetch all customers supplied by the energy company
+    res = es.search(index="flexheat_customers", body={"query":{"bool":{"must":[{"term":{"customer_parent":f"{utility}"}}],
+        "must_not":[],"should":[]}},"from":0,"size":10,"sort":[],"aggs":{}})
 
-    # TODO: fetch subcentrals: customer_id = utility, grid_zone = grid, enable_fcc = true, enable_flexibility = true
-    res = es.search(index="flexheat_peak_hours", body={"query": {"bool": {"must": [{"term": {
-                    "customer_id": "true"}}], "must_not": [], "should": []}}, "from": 0, "size": 10, "sort": [], "aggs": {}})
-
-    result = []
+    customers = []
 
     for item in res['hits']['hits']:
-        result.append(item["_source"]) # return subcentral record
+        customers.append(item["_source"]["customer_id"])
+    
+    # Fetch all subcentrals belonging to the customer and locate in the grid zone
+    subcentrals = []
 
-    return result
+    for customer in customers:
+        res = es.search(index="flexheat_subcentral", body={"query":{"bool":{"must":[{"term":{"customer_id":f"{customer}"}},
+            {"term":{"grid_zone":f"{grid}"}},{"term":{"enable_fcc":"true"}},{"term":{"enable_flex":"true"}}],"must_not":[],"should":[]}},
+            "from":0,"size":10,"sort":[],"aggs":{}})        
 
+        for item in res['hits']['hits']:
+            subcentrals.append(item["_source"])
+        
+    return subcentrals
+
+# Process peak hours for planning
 def runGridPeak(utility, grid, aggregate_repo, flexibility_repo, planning_start):
     logger.info(f"Get peak hours for customer_id = {utility}, grid_zone = {grid}")
 
@@ -74,7 +91,7 @@ def runGridPeak(utility, grid, aggregate_repo, flexibility_repo, planning_start)
             grid = grid,
             aggregate_repo = aggregate_repo,
             flexibility_repo = flexibility_repo,
-            planning_start = start
+            planning_start = planning_start
         )
         
         grid_peak = forecaster.get_peak_hour()
@@ -86,7 +103,8 @@ def runGridPeak(utility, grid, aggregate_repo, flexibility_repo, planning_start)
 
     except Exception as ex:
         logger.error(ex)
-        
+
+# Subcentral-level planning, estimate flexibility from each subcentral        
 def runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, grid_peak):
     logger.info("start forecaster for house")
     logger.info(f"{house}")
@@ -105,6 +123,8 @@ def runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, g
         output = controller.control()
 
         cassandra_repo.write_schedule_for_house(house, output, house_repo)
+        
+        return output
 
     except ValueError as ve:
         logger.error(ve)
@@ -123,23 +143,24 @@ def lambda_handler():
 
     cassandra_repo = CassandraRepository(session)
     house_repo = RESTHouseModelRepository(session)
+    aggregate_repo = FlexibilityModelRepository(session)
+    flexibility_repo = CassandraAggregateRepository(session)
 
-    planning_start = datetime.utcnow() + timedelta(hours=1)
-
-    planning_start = planning_start.strftime("%Y-%m-%d %H:00:00.000Z")
-
+    planning_start = "2020-10-01 00:00:00.000Z"
+    planning_start = datetime.strptime(planning_start, "%Y-%m-%d %H:%M:%S.%f%z")    
+#     start = datetime.utcnow() + timedelta(hours=1)
+#     start = start.strftime("%Y-%m-%d %H:00:00.000Z")
+#    planning_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
     logger.info(f"Planning to start: {planning_start}")
+      
+    ES_URL = 'http://13.48.110.27:9200/'    
+    es = connectES(ES_URL)    
     
-    start = datetime.strptime(planning_start, "%Y-%m-%d %H:%M:%S.%f%z")
-  
-    ES_URL = 'http://13.48.110.27:9200/'
-    
-    es = connectES(ES_URL)
-    
-    utilities = getActiveUtility(es) 
-    
+    utilities = getActiveUtility(es)  
+       
     logger.info("Active energy companies:")
-    logger.info(f"customer_id = {utilities}")
+    
+    logger.info(f"customer_id: {utilities}")
         
     for utility in utilities:
         
@@ -171,7 +192,7 @@ def lambda_handler():
                     latitude=subcentral["geo_coord_lat"],
                     grid_zone=subcentral["grid_zone"]
                 )
-                runSubcentralForecaster(house, cassandra_repo, house_repo, start, grid_peak)
+                runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, grid_peak)
         
     dbConnection.db_shutdown()
 

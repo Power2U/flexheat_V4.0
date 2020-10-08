@@ -27,7 +27,6 @@ class HeatCurve:
 class ModelOutput:
     customer_id: int
     subcentral_id: int
-    grid_zone: int
     tstamp_record: pytz.datetime.datetime
     ts_start: pytz.datetime.datetime
     ts_end: pytz.datetime.datetime
@@ -76,9 +75,9 @@ class Report:
     ts_start: pytz.datetime.datetime
     ts_end: pytz.datetime.datetime
     power_offset: float
-    baseline_power: float
-    heat_power: float
-    indoor_temp: float
+    heating_baseline: float
+    heating_power: float
+    average_indoor_temperature: float
     
 @dataclass_json
 @dataclass(eq=True, frozen=True)
