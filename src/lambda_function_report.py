@@ -7,6 +7,7 @@ from db import *
 from report._subcentral_report import SubcentralReport
 from report._aggregate_report import AggregationReport
 from models import *
+from deploy_utils import *
 
 logger = logging.getLogger(__name__)
 logger.setLevel('DEBUG')
@@ -17,68 +18,6 @@ logger.setLevel('DEBUG')
     Report the actually delivered flexibility on subcentral- and aggregation-level
 
 '''
-
-def connectES(ES_URL):
-    
-    if "ES_URL" in os.environ:
-        ES_URL = os.environ['ES_URL']
-
-    es = Elasticsearch([ES_URL])  
-    
-    return es  
-
-# Fetch all energy companies that enable the flexibility service
-def getActiveUtility(es):
-
-    res = es.search(index="flexheat_customers", body={"query":{"bool":{"must":[{"term":{"enable_flex":"true"}},{"term":{"customer_parent":"0"}}],
-        "must_not":[],"should":[]}},"from":0,"size":50,"sort":[],"aggs":{}})
-
-    result = []
-
-    for item in res['hits']['hits']:
-        result.append(item["_source"]["customer_id"])
-
-    return result
-
-# Fetch all grid zones where peak hours are specified. 
-# Such grid zones need flexibility.
-def getActiveGrid(es, utility, planning_start):
-
-    start = planning_start.strftime('%Y-%m-%dT%H:%M:%SZ')
-    res = es.search(index="flexheat_peak_hours", body={"query":{"bool":{"must":[{"term":{"customer_id":f"{utility}"}},
-        {"range":{"ts_start":{"gt":start}}}],"must_not":[],"should":[]}},"from":0,"size":10,"sort":[],"aggs":{}})
-
-    result = set() # set, without duplicate values
-
-    for item in res['hits']['hits']:
-        result.add(item["_source"]["grid_zone"]) # return grid_zone 
-
-    return result
-
-# Fetch all subcentrals that enable the flexibility service and optimization.
-def getActiveSubcentrals(es, utility, grid): 
-    
-    # Fetch all customers supplied by the energy company
-    res = es.search(index="flexheat_customers", body={"query":{"bool":{"must":[{"term":{"customer_parent":f"{utility}"}}],
-        "must_not":[],"should":[]}},"from":0,"size":10,"sort":[],"aggs":{}})
-
-    customers = []
-
-    for item in res['hits']['hits']:
-        customers.append(item["_source"]["customer_id"])
-    
-    # Fetch all subcentrals belonging to the customer and locate in the grid zone
-    subcentrals = []
-
-    for customer in customers:
-        res = es.search(index="flexheat_subcentral", body={"query":{"bool":{"must":[{"term":{"customer_id":f"{customer}"}},
-            {"term":{"grid_zone":f"{grid}"}},{"term":{"enable_fcc":"true"}},{"term":{"enable_flex":"true"}}],"must_not":[],"should":[]}},
-            "from":0,"size":10,"sort":[],"aggs":{}})        
-
-        for item in res['hits']['hits']:
-            subcentrals.append(item["_source"])
-        
-    return subcentrals
 
 def runSubcentralReporter(house, cassandra_repo, house_repo, report_start, utility_config):
     logger.info("start reporter for house")
