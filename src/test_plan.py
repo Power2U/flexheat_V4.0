@@ -83,10 +83,10 @@ def lambda_handler():
     house_repo = RESTHouseModelRepository(session)
     aggregate_repo = FlexibilityModelRepository(session)
     flexibility_repo = CassandraAggregateRepository(session)
-  
-    start = datetime.utcnow() + timedelta(hours=1)
-    start = start.strftime("%Y-%m-%d %H:00:00.000Z")
-    planning_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
+
+    planning_start = "2020-10-01 00:00:00.000Z"
+    planning_start = datetime.strptime(planning_start, "%Y-%m-%d %H:%M:%S.%f%z")    
+ 
     logger.info(f"Planning to start: {planning_start}")
       
     ES_URL = 'http://13.48.110.27:9200/'    
