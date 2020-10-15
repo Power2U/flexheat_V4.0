@@ -125,13 +125,8 @@ class PnPkModel_Execution(object):
             '''
             Sequence matters!!!
             Sequence keeps consistent with ../dynamic_model/model_trainer.py: DynamicModelGenerator.training_data()            
-            
-            Alternative: 
-            The structure of x can be adjusted flexibly e.g. delete the last three diff components, 
-            then the model structure will be similar as in flexheat V2.0
-            '''                   
-
-#            Alternative: Multiply indoor-outdoor temperature difference with house.heat_loss_coeff, reflecting physical relationships              
+            Alternative: Multiply indoor-outdoor temperature difference with house.heat_loss_coeff, reflecting physical relationships
+            '''                
 #             model_variables =[v.temperature[t - 1], 
 #                                       p.solar[t-1],
 #                                       v.power[t-1],
