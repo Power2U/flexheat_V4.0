@@ -188,9 +188,13 @@ class DynamicModelGenerator():
         # Define model variables        
         '''             
         Sequence matters!!!
-        Sequence keeps consistent with ../mpc/greybox_auto_dynamic.py: PnPkModel_AUTO_DYNAMIC.dynamics()                                  
-        Alternative: Multiply indoor-outdoor temperature difference with house.heat_loss_coeff, reflecting physical relationships
-        '''                     
+        Sequence keeps consistent with ../mpc/greybox_auto_dynamic.py: PnPkModel_AUTO_DYNAMIC.dynamics()  
+                                        
+        Alternative: 
+        The structure of x can be adjusted flexibly e.g. delete the last three diff components, 
+        then the model structure will be similar as in flexheat V2.0
+     
+        '''                    
         x = np.concatenate((temperature_initial,
                                       solar,
                                       power,
@@ -199,6 +203,7 @@ class DynamicModelGenerator():
                                       np.array(out_temp_diff).T,
                                       np.array(solar_diff).T), axis = 1)
         
+# Alternative: Multiply indoor-outdoor temperature difference with house.heat_loss_coeff, reflecting physical relationships
 #        train_x = x * self._timestep / self._capacitance
         train_x = x
                                       
