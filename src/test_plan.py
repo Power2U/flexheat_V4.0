@@ -9,6 +9,8 @@ from forecasters._plan_aggregation import AggregationPlan
 from regulators._mpc_flexibility_plan import MPCController_Plan
 from models import *
 from deploy_utils import *
+import matplotlib.pyplot as plt
+
 logger = logging.getLogger(__name__)
 logger.setLevel('DEBUG')
 
@@ -38,6 +40,17 @@ def runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, g
         output = controller.control()
 
         cassandra_repo.write_plan_for_house(house, output, house_repo)
+        
+        width = 10
+        height = 10
+        fig, (ax1, ax3, ax4) = plt.subplots(3, 1, figsize=(width, height))
+        output['target_temp'] = 23.5
+        output['lower_limit'] =  output['target_temp'] - 0.5       
+         
+        output.plot(y = ['power', 'baseline_power'], ax = ax1, label = ['scheduled power [kW]', 'baseline power [kW]'])
+        output.plot(y = ['indoor_temperature', 'target_temp', 'lower_limit'], ax = ax3, label = ['indoor temperature [degree]', 'target', 'lower limit'])
+        output.plot(y = ['out_temp_forecast'], ax = ax4, label = ['outside temperature [degree]'])
+        plt.show()
         
         return output
 
