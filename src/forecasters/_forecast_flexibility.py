@@ -182,7 +182,7 @@ class HouseDataForecaster(HouseForecaster):
         return self._house_repo.get_model_by_house_execution(self._house)
         
     # Add for flexibility service
-    # Set peak hours for planning horizon
+    # Set peak hours for planning horizon: 1 peak hours, 0 off-peak hours
     def peak_hour(self):
         
         self.forecast_data['peak_hour'] = 0      
@@ -193,19 +193,7 @@ class HouseDataForecaster(HouseForecaster):
                 for index_peak, row_peak in self._grid_peak.iterrows():
                     if index_forecast >= row_peak['ts_start'] and index_forecast < row_peak['ts_end']:
                         self.forecast_data.at[index_forecast, 'peak_hour'] = 1              
-         
-#     peak = self._flexibility_repo.get_peak_by_customer(
-#         customer = self._customer,
-#         grid = self._grid,
-#         time_range = self._time_range,
-#         now = self._planning_start
-#     )         
-#         if not peak.empty:                           
-#             for index_all, row_all in self._all_data.iterrows():
-#                 for index_peak, row_peak in peak.iterrows():
-#                     if index_all >= row_peak['ts_start'] and index_all <= row_peak['ts_end']:
-#                         self._all_data.at[index_all, 'peak_hour'] = 1  
-    
+             
     # Add for flexibility service
     # Set dispatch order for planning horizon                  
     def dispatch(self):
@@ -224,11 +212,14 @@ class HouseDataForecaster(HouseForecaster):
             self.forecast_data = self.forecast_data.join(dispatch, how = 'outer')
                  
             for index, row in self.forecast_data.iterrows():
-                if row['peak_hour'] == 1:
-                    if row['subcentral_dispatch'] > 0:
+                if row['peak_hour'] == 1: # Only dispatch in peak hours are taken into account
+                    if row['subcentral_dispatch'] > 0: # Only negative dispatch (power reduction) is considered in the current version
                         logger.error(f"Dispatch error: Power increase is dispatched for peak hour: {index}")
         else:
             self.forecast_data['subcentral_dispatch'] = 0      
+
+# For the case when positive/negative dispatch (power increase/decrease) are distinguished
+# Optimization model should be revised accordingly
 
 #                 if row['subcentral_dispatch'] >= 0:
 #                     self._all_data.at[index, 'dispatch_increase'] = row_dispatch['subcentral_dispatch']         

@@ -45,11 +45,7 @@ class AggregationPlan():
 
     # Fetch peak hours    
     def get_peak_hour(self):
-         
-#         index = pd.date_range(self._planning_start - self._time_range[0], self._planning_start + self._time_range[1], freq = f"{self._timestep}S")
-#         data_planning = pd.DataFrame(index = index) 
-#         data_planning['peak_hour'] = 0
-           
+                   
         peak = self._flexibility_repo.get_peak_by_customer(
             customer = self._customer,
             grid = self._grid,
@@ -57,12 +53,6 @@ class AggregationPlan():
             now = self._planning_start
         )
                  
-#         for index_all, row_all in data_planning.iterrows():
-#             for index_peak, row_peak in peak.iterrows():
-#                 if index_all >= row_peak['ts_start'] and index_all < row_peak['ts_end']:
-#                     data_planning.at[index_all, 'peak_hour'] = 1  
-             
-#         return data_planning
         return peak
                 
     # Calculate the aggregate flexibility by summarizing subcentral-level flexibility 
