@@ -62,11 +62,11 @@ class MPCConfiguration:
     setpoint: float = 20
     max_ramp: float = 106
     # Add for flexibility service
-    above_error_priority: float = 5000
-    hysteresis_above: float = 1
-    hysteresis_below: float = 1
+    above_error_priority: float = 1
+    hysteresis_above: float = 0
+    hysteresis_below: float = 0.5
     flexibility_price: float = 1.000
-    flexibility_price_priority: float = 100
+    flexibility_price_priority: float = 1
     rebound_limit: float = 0.5
     
     def __init__(self, parameters):
