@@ -42,7 +42,7 @@ def runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, planning_st
     except Exception as ex:
         logger.error(ex)
         
-def lambda_handler():  
+def lambda_handler(planning_start):  
 
     DB_URL = '13.48.110.27'
     if "DB_URL" in os.environ:
@@ -55,13 +55,6 @@ def lambda_handler():
     house_repo = RESTHouseModelRepository(session)
     aggregate_repo = FlexibilityModelRepository(session)
     flexibility_repo = CassandraAggregateRepository(session)
-
-    planning_start = "2020-10-01 00:00:00.000Z"
-    planning_start = datetime.strptime(planning_start, "%Y-%m-%d %H:%M:%S.%f%z")    
-#     start = datetime.utcnow() + timedelta(hours=1)
-#     start = start.strftime("%Y-%m-%d %H:00:00.000Z")
-#    planning_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
-    logger.info(f"Planning to start: {planning_start}")
       
     ES_URL = 'http://13.48.110.27:9200/'    
     es = connectES(ES_URL)    
@@ -99,4 +92,9 @@ def lambda_handler():
     return json.dumps({})
 
 if __name__ == '__main__':
-    lambda_handler()
+
+    start = datetime.utcnow() + timedelta(hours=1)
+    start = start.strftime("%Y-%m-%d %H:00:00.000Z")
+    planning_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
+    logger.info(f"Planning to start: {planning_start}")    
+    lambda_handler(planning_start)
