@@ -18,6 +18,8 @@ logger.setLevel('DEBUG')
     Flexheat V4.0
     Step 1.3 in the 3-step service delivery model
     Planning on subcentral- and aggregation-level
+    
+    Test the planning function with a specific planning_start
 
 '''
 

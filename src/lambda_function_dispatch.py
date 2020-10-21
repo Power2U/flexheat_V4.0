@@ -31,10 +31,10 @@ def runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, planning_st
             planning_start = planning_start
         )
         
-        subcentral_dispatches = forecaster.distribute_dispatch(subcentrals = subcentrals, 
-                                                           cassandra_house_repo = cassandra_house_repo,
-                                                           house_repo = house_repo
-                                                           )       
+        forecaster.distribute_dispatch(subcentrals = subcentrals, 
+                                       cassandra_house_repo = cassandra_house_repo,
+                                       house_repo = house_repo
+                                    )       
 
     except ValueError as ve:
         logger.error(ve)
