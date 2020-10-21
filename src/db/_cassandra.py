@@ -220,7 +220,7 @@ class CassandraHouseRepository(HouseSensorRepository):
         
         if len(rows._current_rows) == 0:
                     
-            logger.debug(f"No planned flexibility is found for cid = {house.customer_id}, sid = {house.subcentral_id}")
+            logger.warning(f"No planned flexibility is found for cid = {house.customer_id}, sid = {house.subcentral_id}")
             data = pd.DataFrame(dictionary)
        
         else:
@@ -258,7 +258,7 @@ class CassandraHouseRepository(HouseSensorRepository):
         
         if len(rows._current_rows) == 0:
                     
-            logger.debug(f"No dispatch plan is found for cid = {house.customer_id}, sid = {house.subcentral_id}")
+            logger.warning(f"No dispatch plan is found for cid = {house.customer_id}, sid = {house.subcentral_id}")
             data = pd.DataFrame(dictionary)
        
         else:
@@ -635,7 +635,7 @@ class CassandraAggregateRepository():
         
         if len(rows._current_rows) == 0:
                     
-            logger.debug(f"No peak hour is found for cid = {customer}, grid_zone = {grid}")
+            logger.warning(f"No peak hour is found for cid = {customer}, grid_zone = {grid}")
             data = pd.DataFrame(dictionary)
        
         else:
@@ -675,7 +675,7 @@ class CassandraAggregateRepository():
         
         if len(rows._current_rows) == 0:
                     
-            logger.debug(f"No flexibility plan is found for cid = {customer}, grid_zone = {grid}")
+            logger.warning(f"No flexibility plan is found for cid = {customer}, grid_zone = {grid}")
             data = pd.DataFrame(dictionary)
        
         else:
@@ -714,7 +714,7 @@ class CassandraAggregateRepository():
         
         if len(rows._current_rows) == 0:
                     
-            logger.debug(f"No dispatch is found for cid = {customer}, grid_zone = {grid}")
+            logger.warning(f"No dispatch is found for cid = {customer}, grid_zone = {grid}")
             data = pd.DataFrame(dictionary)
        
         else:
