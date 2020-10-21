@@ -164,6 +164,28 @@ class PnPkModel_Plan(object):
             v.temperature[t] == dynamic_model[t-1]  for t in range(1, self._horizon + 1)
         ]  
         
+    # Find out consecutive peak hours
+    # Assumption (according to feedback from Tekniska Verken): planned power reduction is expected equal during the consecutive peak hours
+    # The flexibility distribution among peak hours can be adjusted if other requests are proposed by energy company
+    def find_consecutive_peak(self):
+        
+        result = []
+        p = self._parameters.peak_hour
+        a = 0
+        if p[0] == 1:
+          result[a].append(i)
+          
+        for i in range(1, len(p)):
+              if p[i] == 1 and p[i] - p[i-1] == 1:
+                  result.append([])
+                  result[a].append(i)
+              if p[i] == 1 and p[i] - p[i-1] == 0:
+                  result[a].append(i)
+              elif p[i] == 0 and p[i] - p[i-1] == -1:
+                  a+=1
+            
+        self._consecutive_peak = result
+
     # Other constraints of the optimization        
     def to_problem(self):
         
@@ -218,11 +240,22 @@ class PnPkModel_Plan(object):
         ]
 
         # Add for flexibility service
+        # Power increase are assumed within a certain limit
         rebound = [
             v.power[t] <= p.baseline_power[t] * (1 + p.rebound_limit) for t in range(1, self._horizon)
-            ]        
+            ]    
         
-        constraints = self.dynamics + initial + temperature_diff + rate_limit + errors + reference + smoothness + rebound
+        # Add for flexibility service
+        # Assumption (according to feedback from Tekniska Verken): planned power reduction is expected equal during the consecutive peak hours
+        # The flexibility distribution among peak hours can be adjusted if other requests are proposed by energy company        
+        distribute = []
+        if len(self._consecutive_peak) != 0:
+            for i in self._consecutive_peak:
+                if len(i) > 1:
+                    for j in range(0, len(i) - 1):
+                        distribute += [v.power[i[j]] - p.baseline_power[i[j]] == v.power[i[j+1]] - p.baseline_power[i[j+1]]] 
+        
+        constraints = self.dynamics + initial + temperature_diff + rate_limit + errors + reference + smoothness + rebound + distribute
         
         return cp.Problem(
             objective=self.objective,
@@ -273,7 +306,7 @@ class PnPkModel_Plan(object):
         self._parameters.baseline_power.value = forecast_data.baseline_power.values
         self._parameters.max_power_offset.value = 200#self._config.max_power_offset  
         self._parameters.max_ramp.value = 300#self._config.max_ramp
-        self._parameters.setpoint.value = 23.5#self._config.setpoint
+        self._parameters.setpoint.value = 23#self._config.setpoint
         self._parameters.below_error_priority.value = self._config.below_error_priority
         self._parameters.energy_price_priority.value = self._config.energy_price_priority
         self._parameters.rate_limit_lower = self._config.rate_limit_lower
@@ -292,7 +325,9 @@ class PnPkModel_Plan(object):
         self._parameters.flexibility_price = self._config.flexibility_price_priority
         self._parameters.above_error_priority = self._config.above_error_priority
         self._parameters.rebound_limit = self._config.rebound_limit
-                        
+        
+        self.find_consecutive_peak()
+        
         problem = self.to_problem()
 
         logger.info('Call CVXOPT for solution...')
