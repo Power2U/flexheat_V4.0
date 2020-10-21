@@ -78,7 +78,8 @@ class AggregationPlan():
         
         index = pd.date_range(self._planning_start - self._time_range[0], self._planning_start + self._time_range[1], freq = f"{self._timestep}S")
         data_planning = pd.DataFrame(index = index) 
-          
+
+        # Fetch aggregate dispatch and fill null values with 0       
         aggregate_dispatch = self._flexibility_repo.get_dispatch_by_customer(
             customer = self._customer,
             grid = self._grid,
@@ -87,7 +88,8 @@ class AggregationPlan():
         ).join(data_planning, how = 'outer')  
         
         aggregate_dispatch.fillna(0, inplace=True)
-                
+        
+        # Fetch aggregate plan and fill null values with 0        
         aggregate_plan = self._flexibility_repo.get_plan_by_customer(
             customer = self._customer,
             grid = self._grid,
@@ -96,8 +98,8 @@ class AggregationPlan():
         ).join(data_planning, how = 'outer') 
         
         aggregate_plan.fillna(0, inplace=True)
-                        
-        subcentral_dispatches = []
+        
+        # Calculate dispatch for each subcentral             
         for subcentral in subcentrals:
             
             logger.info(f"Get plan for subcentral_id = {subcentral}")
@@ -130,7 +132,14 @@ class AggregationPlan():
                 for index, row in aggregate_plan.iterrows():
                     if row['aggregate_plan'] != 0:
                         prop = subcentral_dispatch.loc[index, 'subcentral_plan'] / row['aggregate_plan'] 
-                        subcentral_dispatch.loc[index, 'subcentral_dispatch'] = prop * aggregate_dispatch.loc[index,'aggregate_dispatch']
+                        
+                        # If aggregate plan and dispatch have different direction, consider dispatch as 0
+                        if row['aggregate_plan'] * aggregate_dispatch.loc[index,'aggregate_dispatch'] < 0:
+                            logger.warning(f"dispatch and plan have different sign at {index}")
+                            subcentral_dispatch.loc[index, 'subcentral_dispatch'] = 0
+                        # If aggregate plan and dispatch have the same direction, dispatch for each subcentral is in proportion to its plan                    
+                        else:
+                            subcentral_dispatch.loc[index, 'subcentral_dispatch'] = prop * aggregate_dispatch.loc[index,'aggregate_dispatch']
                     else:
                         subcentral_dispatch['subcentral_dispatch'] = 0
         
