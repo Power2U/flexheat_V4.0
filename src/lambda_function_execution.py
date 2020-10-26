@@ -20,7 +20,32 @@ logger.setLevel('DEBUG')
 
 '''
 
-# Subcentral-level planning, estimate flexibility from each subcentral        
+# Fetch all subcentrals that enable the flexibility service and optimization
+def getActiveSubcentrals_execution(es, utility): 
+    
+    # Fetch all customers supplied by the energy company
+    res = es.search(index="flexheat_customers", body={"query":{"bool":{"must":[{"term":{"customer_parent":f"{utility}"}}],
+        "must_not":[],"should":[]}},"from":0,"size":10,"sort":[],"aggs":{}})
+
+    customers = []
+
+    for item in res['hits']['hits']:
+        customers.append(item["_source"]["customer_id"])
+    
+    # Fetch all subcentrals belonging to the customer
+    subcentrals = []
+
+    for customer in customers:
+        res = es.search(index="flexheat_subcentral", body={"query":{"bool":{"must":[{"term":{"customer_id":f"{customer}"}},
+            {"term":{"enable_fcc":"true"}},{"term":{"enable_flex":"true"}}],"must_not":[],"should":[]}},
+            "from":0,"size":50,"sort":[],"aggs":{}})        
+
+        for item in res['hits']['hits']:
+            subcentrals.append(item["_source"])
+        
+    return subcentrals
+
+# Subcentral-level planning, generate execution schedule for each subcentral     
 def runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, grid_peak):
     logger.info("start forecaster for house")
     logger.info(f"{house}")
@@ -48,7 +73,7 @@ def runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, g
     except Exception as ex:
         logger.error(ex)
         
-def lambda_handler():  
+def lambda_handler(planning_start):  
 
     DB_URL = '13.48.110.27'
     if "DB_URL" in os.environ:
@@ -61,12 +86,7 @@ def lambda_handler():
     house_repo = RESTHouseModelRepository(session)
     aggregate_repo = FlexibilityModelRepository(session)
     flexibility_repo = CassandraAggregateRepository(session)
-
-    planning_start = "2020-10-01 00:00:00.000Z"
-    planning_start = datetime.strptime(planning_start, "%Y-%m-%d %H:%M:%S.%f%z")    
-#     start = datetime.utcnow() + timedelta(hours=1)
-#     start = start.strftime("%Y-%m-%d %H:00:00.000Z")
-#    planning_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
+  
     logger.info(f"Planning to start: {planning_start}")
       
     ES_URL = 'http://13.48.110.27:9200/'    
@@ -81,39 +101,34 @@ def lambda_handler():
     for utility in utilities:
         
         logger.info(f"Plan for customer_id = {utility}")
-       
-        grids = getActiveGrid(es, utility, planning_start) # return peak hours sorting by grid zone
-        
-        logger.info(f"Flexibility is needed for grid_zone = {grids}")
-       
-        for grid in grids:
-        
-            logger.info(f"Plan for grid_zone = {grid}")
-            
-            grid_peak = runGridPeak(utility, grid, aggregate_repo, flexibility_repo, planning_start)
-            
-            subcentrals = getActiveSubcentrals(es, utility, grid)# return subcentrals in a grid zone
-            
-            logger.info(f"Active subcentrals are: {subcentrals}")
-  
-            for subcentral in subcentrals:
-                
-                logger.info(f"Plan for subcentral_id = {subcentral}")
-                
-                house = House(
-                    location=subcentral["geo_city"],
-                    customer_id=subcentral['customer_id'],
-                    subcentral_id=subcentral['subcentral_id'],
-                    longitude=subcentral['geo_coord_lon'],
-                    latitude=subcentral["geo_coord_lat"],
-                    grid_zone=subcentral["grid_zone"]
+    
+        subcentrals = getActiveSubcentrals_execution(es, utility)# return subcentrals belonging to the utility      
+        logger.info(f"Active subcentrals are: {subcentrals}")
+
+        for subcentral in subcentrals:
+              
+            logger.info(f"Plan for subcentral_id = {subcentral}")
+              
+            house = House(
+                location=subcentral["geo_city"],
+                customer_id=subcentral['customer_id'],
+                subcentral_id=subcentral['subcentral_id'],
+                longitude=subcentral['geo_coord_lon'],
+                latitude=subcentral["geo_coord_lat"],
+                grid_zone=subcentral["grid_zone"]
                 )
-                runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, grid_peak)
+            
+            grid_peak = runGridPeak(utility, subcentral["grid_zone"], aggregate_repo, flexibility_repo, planning_start)
+            runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, grid_peak)
         
     dbConnection.db_shutdown()
 
     return json.dumps({})
 
 if __name__ == '__main__':
-    lambda_handler()
+    start = datetime.utcnow() + timedelta(hours=1)
+    start = start.strftime("%Y-%m-%d %H:00:00.000Z")
+    planning_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
+    logger.info(f"Planning to start: {planning_start}")    
+    lambda_handler(planning_start)
 
