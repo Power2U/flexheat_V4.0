@@ -20,7 +20,9 @@ logger.setLevel('DEBUG')
 
 '''
 
-# Fetch all subcentrals that enable the flexibility service and optimization
+# Fetch all subcentrals that enable the flexibility service and optimization (fcc)
+# All subcentrals enabling flexibility service and optimization will be scheduled
+# If a subcentral only enables optimization, flexheat V3.0 would be applied instead in other microservice
 def getActiveSubcentrals_execution(es, utility): 
     
     # Fetch all customers supplied by the energy company
