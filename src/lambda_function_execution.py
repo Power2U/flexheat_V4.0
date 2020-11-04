@@ -88,9 +88,7 @@ def lambda_handler(planning_start):
     house_repo = RESTHouseModelRepository(session)
     aggregate_repo = FlexibilityModelRepository(session)
     flexibility_repo = CassandraAggregateRepository(session)
-  
-    logger.info(f"Planning to start: {planning_start}")
-      
+     
     ES_URL = 'http://13.48.110.27:9200/'    
     es = connectES(ES_URL)    
     

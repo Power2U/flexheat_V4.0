@@ -66,7 +66,7 @@ def runGridReporter(customer, grid, aggregate_repo, report_start, subcentral_rep
     except Exception as ex:
         logger.error(ex)
         
-def lambda_handler():  
+def lambda_handler(report_start):  
 
     DB_URL = '13.48.110.27'
     if "DB_URL" in os.environ:
@@ -79,16 +79,7 @@ def lambda_handler():
     house_repo = RESTHouseModelRepository(session)
     aggregate_repo = FlexibilityModelRepository(session)
     flexibility_repo = CassandraAggregateRepository(session)
-
-    report_start = "2020-10-01 00:00:00.000Z" 
-    report_start = datetime.strptime(report_start, "%Y-%m-%d %H:%M:%S.%f%z")    
- 
-#     report_start = datetime.utcnow() - timedelta(hours=24)
-#     report_start = report_start.strftime("%Y-%m-%d %H:00:00.000Z")
-#     report_start = datetime.strptime(report_start, "%Y-%m-%d %H:%M:%S.%f%z")
-
-    logger.info(f"Report for the period from: {report_start}")
-    
+   
     ES_URL = 'http://13.48.110.27:9200/'
     
     es = connectES(ES_URL)
@@ -105,6 +96,10 @@ def lambda_handler():
         utility_config = aggregate_repo.get_config_by_customer(utility)
         
         grids = getActiveGrid(es, utility, report_start)
+                
+        if bool(grids) is False:
+            logger.info("No peak hours have been specified, therefore no report.")
+            continue 
         
         logger.info(f"Flexibility is needed for grid_zone = {grids}")
        
@@ -141,5 +136,9 @@ def lambda_handler():
     return json.dumps({})
 
 if __name__ == '__main__':
-    lambda_handler()
-
+    
+    start = datetime.utcnow() + timedelta(hours=1)
+    start = start.strftime("%Y-%m-%d %H:00:00.000Z")
+    report_start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f%z")    
+    logger.info(f"Report to start: {report_start}")    
+    lambda_handler(report_start)
