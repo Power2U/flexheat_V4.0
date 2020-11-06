@@ -19,7 +19,7 @@ logger.setLevel('DEBUG')
     Step 1.3 in the 3-step service delivery model
     Planning on subcentral- and aggregation-level
     
-    Test the planning function with a specific planning_start
+    Test the plan function lambda_handler (in lambda_function_plan.py) with a specific report_start
 
 '''
 

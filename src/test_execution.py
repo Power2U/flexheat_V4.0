@@ -9,7 +9,7 @@ logger.setLevel('DEBUG')
     Step 2.1 in the 3-step service delivery model
     Distribute dispatch orders for subcentrals
     
-    Test the execution function with a specific planning_start
+    Test the execution function lambda_handler (in lambda_function_execution.py) with a specific report_start
 
 '''
 
