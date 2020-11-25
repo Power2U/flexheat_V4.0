@@ -63,7 +63,7 @@ class MPCConfiguration:
     max_ramp: float = 106
     # Add for flexibility service
     above_error_priority: float = 1
-    hysteresis_above: float = 0
+    hysteresis_above: float = 0.5
     hysteresis_below: float = 0.5
     flexibility_price: float = 1.000
     flexibility_price_priority: float = 1

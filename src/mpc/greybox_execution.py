@@ -277,7 +277,7 @@ class PnPkModel_Execution(object):
         self._parameters.baseline_power.value = forecast_data.baseline_power.values
         self._parameters.max_power_offset.value = self._config.max_power_offset  
         self._parameters.max_ramp.value = self._config.max_ramp
-        self._parameters.setpoint.value = 21#self._config.setpoint
+        self._parameters.setpoint.value = self._config.setpoint #21 for test
         self._parameters.below_error_priority.value = self._config.below_error_priority
         self._parameters.energy_price_priority.value = self._config.energy_price_priority
         self._parameters.rate_limit_lower = self._config.rate_limit_lower
