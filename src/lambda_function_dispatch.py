@@ -44,52 +44,59 @@ def runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, planning_st
         
 def lambda_handler(planning_start):  
 
-    DB_URL = '13.48.110.27'
-    if "DB_URL" in os.environ:
-        DB_URL = os.environ['DB_URL']
-
-    dbConnection = DBConnection(DB_URL)
-    session = dbConnection.session
-
-    cassandra_house_repo = CassandraHouseRepository(session)
-    house_repo = RESTHouseModelRepository(session)
-    aggregate_repo = FlexibilityModelRepository(session)
-    flexibility_repo = CassandraAggregateRepository(session)
+    try: 
+        DB_URL = '13.48.110.27'
+        if "DB_URL" in os.environ:
+            DB_URL = os.environ['DB_URL']
+    
+        dbConnection = DBConnection(DB_URL)
+        session = dbConnection.session
+    
+        cassandra_house_repo = CassandraHouseRepository(session)
+        house_repo = RESTHouseModelRepository(session)
+        aggregate_repo = FlexibilityModelRepository(session)
+        flexibility_repo = CassandraAggregateRepository(session)
+          
+        ES_URL = 'http://13.48.110.27:9200/'    
+        es = connectES(ES_URL)    
+        
+        utilities = getActiveUtility(es)  
+           
+        logger.info("Active energy companies:")
+        
+        logger.info(f"customer_id: {utilities}")
+            
+        for utility in utilities:
+            
+            logger.info(f"Dispatch for energy company customer_id = {utility}")
+           
+            grids = getActiveGrid(es, utility, planning_start)
+            
+            if bool(grids) is False:
+                logger.info("No peak hours have been specified")
+                continue 
+                           
+            logger.info(f"Flexibility is needed for grid_zone: {grids}")
+           
+            for grid in grids:
+                
+                logger.info(f"Dispatch for grid_zone = {grid}")
+                
+                subcentrals = getActiveSubcentrals(es, utility, grid)
+                
+                logger.info(f"Active subcentrals are: {subcentrals}")
       
-    ES_URL = 'http://13.48.110.27:9200/'    
-    es = connectES(ES_URL)    
-    
-    utilities = getActiveUtility(es)  
-       
-    logger.info("Active energy companies:")
-    
-    logger.info(f"customer_id: {utilities}")
+                runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, planning_start, subcentrals, cassandra_house_repo, house_repo)
+                
+        dbConnection.db_shutdown()
         
-    for utility in utilities:
-        
-        logger.info(f"Dispatch for energy company customer_id = {utility}")
-       
-        grids = getActiveGrid(es, utility, planning_start)
-        
-        if bool(grids) is False:
-            logger.info("No peak hours have been specified")
-            continue 
-                       
-        logger.info(f"Flexibility is needed for grid_zone: {grids}")
-       
-        for grid in grids:
-            
-            logger.info(f"Dispatch for grid_zone = {grid}")
-            
-            subcentrals = getActiveSubcentrals(es, utility, grid)
-            
-            logger.info(f"Active subcentrals are: {subcentrals}")
-  
-            runGridDispatch(utility, grid, aggregate_repo, flexibility_repo, planning_start, subcentrals, cassandra_house_repo, house_repo)
-            
-    dbConnection.db_shutdown()
+        return json.dumps({})
     
-    return json.dumps({})
+    except ValueError as ve:
+        logger.error(ve)
+
+    except Exception as ex:
+        logger.error(ex)
 
 if __name__ == '__main__':
 

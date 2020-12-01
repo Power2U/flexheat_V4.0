@@ -77,53 +77,60 @@ def runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, g
         
 def lambda_handler(planning_start):  
 
-    DB_URL = '13.48.110.27'
-    if "DB_URL" in os.environ:
-        DB_URL = os.environ['DB_URL']
-
-    dbConnection = DBConnection(DB_URL)
-    session = dbConnection.session
-
-    cassandra_repo = CassandraRepository(session)
-    house_repo = RESTHouseModelRepository(session)
-    aggregate_repo = FlexibilityModelRepository(session)
-    flexibility_repo = CassandraAggregateRepository(session)
-     
-    ES_URL = 'http://13.48.110.27:9200/'    
-    es = connectES(ES_URL)    
+    try:
+        DB_URL = '13.48.110.27'
+        if "DB_URL" in os.environ:
+            DB_URL = os.environ['DB_URL']
     
-    utilities = getActiveUtility(es)  
-       
-    logger.info("Active energy companies:")
+        dbConnection = DBConnection(DB_URL)
+        session = dbConnection.session
     
-    logger.info(f"customer_id: {utilities}")
+        cassandra_repo = CassandraRepository(session)
+        house_repo = RESTHouseModelRepository(session)
+        aggregate_repo = FlexibilityModelRepository(session)
+        flexibility_repo = CassandraAggregateRepository(session)
+         
+        ES_URL = 'http://13.48.110.27:9200/'    
+        es = connectES(ES_URL)    
         
-    for utility in utilities:
+        utilities = getActiveUtility(es)  
+           
+        logger.info("Active energy companies:")
         
-        logger.info(f"Plan for customer_id = {utility}")
-    
-        subcentrals = getActiveSubcentrals_execution(es, utility)# return subcentrals belonging to the utility      
-        logger.info(f"Active subcentrals are: {subcentrals}")
-
-        for subcentral in subcentrals:
-              
-            logger.info(f"Plan for subcentral_id = {subcentral}")
-              
-            house = House(
-                location=subcentral["geo_city"],
-                customer_id=subcentral['customer_id'],
-                subcentral_id=subcentral['subcentral_id'],
-                longitude=subcentral['geo_coord_lon'],
-                latitude=subcentral["geo_coord_lat"],
-                grid_zone=subcentral["grid_zone"]
-                )
+        logger.info(f"customer_id: {utilities}")
             
-            grid_peak = runGridPeak(utility, subcentral["grid_zone"], aggregate_repo, flexibility_repo, planning_start)
-            runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, grid_peak)
+        for utility in utilities:
+            
+            logger.info(f"Plan for customer_id = {utility}")
         
-    dbConnection.db_shutdown()
+            subcentrals = getActiveSubcentrals_execution(es, utility)# return subcentrals belonging to the utility      
+            logger.info(f"Active subcentrals are: {subcentrals}")
+    
+            for subcentral in subcentrals:
+                  
+                logger.info(f"Plan for subcentral_id = {subcentral}")
+                  
+                house = House(
+                    location=subcentral["geo_city"],
+                    customer_id=subcentral['customer_id'],
+                    subcentral_id=subcentral['subcentral_id'],
+                    longitude=subcentral['geo_coord_lon'],
+                    latitude=subcentral["geo_coord_lat"],
+                    grid_zone=subcentral["grid_zone"]
+                    )
+                
+                grid_peak = runGridPeak(utility, subcentral["grid_zone"], aggregate_repo, flexibility_repo, planning_start)
+                runSubcentralForecaster(house, cassandra_repo, house_repo, planning_start, grid_peak)
+            
+        dbConnection.db_shutdown()
+    
+        return json.dumps({})
+    
+    except ValueError as ve:
+        logger.error(ve)
 
-    return json.dumps({})
+    except Exception as ex:
+        logger.error(ex)
 
 if __name__ == '__main__':
     start = datetime.utcnow() + timedelta(hours=1)

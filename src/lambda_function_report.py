@@ -68,72 +68,79 @@ def runGridReporter(customer, grid, aggregate_repo, report_start, subcentral_rep
         
 def lambda_handler(report_start):  
 
-    DB_URL = '13.48.110.27'
-    if "DB_URL" in os.environ:
-        DB_URL = os.environ['DB_URL']
-
-    dbConnection = DBConnection(DB_URL)
-    session = dbConnection.session
-
-    cassandra_repo = CassandraRepository(session)
-    house_repo = RESTHouseModelRepository(session)
-    aggregate_repo = FlexibilityModelRepository(session)
-    flexibility_repo = CassandraAggregateRepository(session)
-   
-    ES_URL = 'http://13.48.110.27:9200/'
+    try:
+        DB_URL = '13.48.110.27'
+        if "DB_URL" in os.environ:
+            DB_URL = os.environ['DB_URL']
     
-    es = connectES(ES_URL)
+        dbConnection = DBConnection(DB_URL)
+        session = dbConnection.session
     
-    utilities = getActiveUtility(es) 
-    
-    logger.info("Active energy companies:")
-    logger.info(f"customer_id = {utilities}")
-        
-    for utility in utilities:
-        
-        logger.info(f"Report for customer_id = {utility}")
-        
-        utility_config = aggregate_repo.get_config_by_customer(utility)
-        
-        grids = getActiveGrid(es, utility, report_start)
-                
-        if bool(grids) is False:
-            logger.info("No peak hours have been specified, therefore no report.")
-            continue 
-        
-        logger.info(f"Flexibility is needed for grid_zone = {grids}")
+        cassandra_repo = CassandraRepository(session)
+        house_repo = RESTHouseModelRepository(session)
+        aggregate_repo = FlexibilityModelRepository(session)
+        flexibility_repo = CassandraAggregateRepository(session)
        
-        for grid in grids:
-            
-            subcentral_reports = []
+        ES_URL = 'http://13.48.110.27:9200/'
         
-            logger.info(f"Report for grid_zone = {grid}")
-            
-            subcentrals = getActiveSubcentrals(es, utility, grid)
-            
-            logger.info(f"Active subcentrals are: {subcentrals}")
-  
-            for subcentral in subcentrals:
-                
-                logger.info(f"Report for subcentral = {subcentral}")
-                
-                house = House(
-                    location=subcentral["geo_city"],
-                    customer_id=subcentral['customer_id'],
-                    subcentral_id=subcentral['subcentral_id'],
-                    longitude=subcentral['geo_coord_lon'],
-                    latitude=subcentral["geo_coord_lat"],
-                    grid_zone=subcentral["grid_zone"]
-                )
-                subcentral_report = runSubcentralReporter(house, cassandra_repo, house_repo, report_start, utility_config)
-                
-                subcentral_reports.append(subcentral_report)
-                
-            runGridReporter(utility, grid, aggregate_repo, report_start, subcentral_reports, flexibility_repo)
+        es = connectES(ES_URL)
         
-    dbConnection.db_shutdown()
+        utilities = getActiveUtility(es) 
+        
+        logger.info("Active energy companies:")
+        logger.info(f"customer_id = {utilities}")
+            
+        for utility in utilities:
+            
+            logger.info(f"Report for customer_id = {utility}")
+            
+            utility_config = aggregate_repo.get_config_by_customer(utility)
+            
+            grids = getActiveGrid(es, utility, report_start)
+                    
+            if bool(grids) is False:
+                logger.info("No peak hours have been specified, therefore no report.")
+                continue 
+            
+            logger.info(f"Flexibility is needed for grid_zone = {grids}")
+           
+            for grid in grids:
+                
+                subcentral_reports = []
+            
+                logger.info(f"Report for grid_zone = {grid}")
+                
+                subcentrals = getActiveSubcentrals(es, utility, grid)
+                
+                logger.info(f"Active subcentrals are: {subcentrals}")
+      
+                for subcentral in subcentrals:
+                    
+                    logger.info(f"Report for subcentral = {subcentral}")
+                    
+                    house = House(
+                        location=subcentral["geo_city"],
+                        customer_id=subcentral['customer_id'],
+                        subcentral_id=subcentral['subcentral_id'],
+                        longitude=subcentral['geo_coord_lon'],
+                        latitude=subcentral["geo_coord_lat"],
+                        grid_zone=subcentral["grid_zone"]
+                    )
+                    subcentral_report = runSubcentralReporter(house, cassandra_repo, house_repo, report_start, utility_config)
+                    
+                    subcentral_reports.append(subcentral_report)
+                    
+                runGridReporter(utility, grid, aggregate_repo, report_start, subcentral_reports, flexibility_repo)
+            
+        dbConnection.db_shutdown()
+    
+        return json.dumps({})
+    
+    except ValueError as ve:
+        logger.error(ve)
 
-    return json.dumps({})
+    except Exception as ex:
+        logger.error(ex)
 
 if __name__ == '__main__':
     
